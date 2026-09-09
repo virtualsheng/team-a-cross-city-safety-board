@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cross-city safety board</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #141c31;
+      --line: #243049;
+      --text: #e8eefc;
+      --muted: #93a0c0;
+      --accent: #5eead4;
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background: radial-gradient(1200px 500px at 10% -10%, #1a2744, var(--bg));
+      color: var(--text);
+    }
+    header {
+      display: flex; justify-content: space-between; gap: 16px; align-items: flex-end;
+      padding: 20px 24px 12px; border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0; font-size: 22px; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input, button, select {
+      font: inherit; border-radius: 8px; border: 1px solid var(--line); padding: 8px 12px;
+    }
+    input { background: #0e1528; color: var(--text); min-width: 340px; }
+    button { background: var(--accent); color: #04221c; font-weight: 700; cursor: pointer; }
+    button.secondary, select { background: #0e1528; color: var(--text); }
+    label.tog { color: var(--muted); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+    main { display: grid; grid-template-columns: 280px 1fr; gap: 16px; padding: 16px 24px 40px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .rank-row { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; cursor: pointer; }
+    .rank-row:hover, .rank-row.active { background: #1b2744; margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
+    .rank-row b { color: var(--accent); }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; }
+    .chips button { padding: 4px 10px; font-size: 12px; }
+    .chips button.on { outline: 2px solid var(--accent); }
+    .cities { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .city { transition: opacity 0.2s; }
+    .city.dim { opacity: 0.28; }
+    .city h2 { margin: 0 0 10px; font-size: 16px; text-transform: capitalize; }
+    .hit { margin-bottom: 14px; }
+    .hit h3 { margin: 0 0 6px; font-size: 13px; word-break: break-all; }
+    .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .caption { font-size: 12px; line-height: 1.4; color: #d5def3; margin-bottom: 8px; }
+    .caption.clamp { max-height: 4.6em; overflow: hidden; }
+    .triptych { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .clip { background: #0a1020; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+    .clip label { display: block; padding: 4px 6px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .stage { position: relative; height: 110px; background: #0a1020; cursor: pointer; }
+    .stage img.thumb {
+      position: absolute; inset: 0; width: 100%; height: 110px; object-fit: cover; display: block; z-index: 1;
+    }
+    .stage::after {
+      content: "▶";
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      z-index: 2; color: #fff; font-size: 22px; text-shadow: 0 1px 4px #000;
+      pointer-events: none;
+    }
+    .stage.playing::after { display: none; }
+    .stage.playing img.thumb { opacity: 0; pointer-events: none; }
+    video { width: 100%; height: 110px; background: #000; object-fit: cover; display: block; position: relative; z-index: 3; }
+    video:not(.has-src) { pointer-events: none; }
+    canvas.yolo {
+      position: absolute; left: 0; top: 0; width: 100%; height: 110px; pointer-events: none;
+    }
+    .status { padding: 8px 24px; color: var(--warn); font-size: 13px; }
+    .briefing {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+      padding: 0 24px 12px;
+    }
+    .brief-card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      padding: 10px 12px; display: grid; grid-template-columns: 96px 1fr; gap: 10px;
+      min-height: 88px;
+    }
+    .brief-card.empty { opacity: 0.55; }
+    .brief-card img { width: 96px; height: 68px; object-fit: cover; border-radius: 6px; background: #0a1020; }
+    .brief-card h3 { margin: 0; font-size: 13px; text-transform: capitalize; }
+    .brief-card p { margin: 4px 0 0; font-size: 12px; color: #d5def3; line-height: 1.35; }
+    .badge {
+      display: inline-block; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--accent); border: 1px solid #2a5f56; border-radius: 999px; padding: 1px 8px; margin-right: 6px;
+    }
+    .ladder { margin-top: 14px; }
+    .ladder-track {
+      position: relative; height: 36px; margin: 8px 0 4px;
+      background: linear-gradient(90deg, #1a2238, #243049);
+      border-radius: 8px; border: 1px solid var(--line);
+    }
+    .ladder-tick {
+      position: absolute; top: 0; bottom: 0; width: 2px; background: #f87171;
+    }
+    .ladder-tick span {
+      position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+      font-size: 9px; color: #f87171; white-space: nowrap;
+    }
+    .ladder-dot {
+      position: absolute; top: 50%; width: 8px; height: 8px; border-radius: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .dot-bangkok { background: #5eead4; }
+    .dot-dublin { background: #fbbf24; }
+    .dot-london { background: #38bdf8; }
+    .sig { margin-top: 12px; font-size: 12px; }
+    .sig + .sig { border-top: 1px solid var(--line); padding-top: 10px; }
+    .mix { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .empty { color: var(--muted); padding: 12px 0; font-size: 13px; }
+    #lightbox {
+      display: none; position: fixed; inset: 0; z-index: 50;
+      background: rgba(4, 8, 18, 0.88); padding: 24px; overflow: auto;
+    }
+    #lightbox.open { display: block; }
+    .lb-inner {
+      max-width: 1200px; margin: 0 auto; background: var(--panel);
+      border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 20px;
+    }
+    .lb-bar { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 8px; }
+    .lb-inner h2 { margin: 0 0 6px; font-size: 16px; word-break: break-all; }
+    .lb-videos { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 10px; }
+    .lb-videos label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+    .lb-videos video {
+      width: 100%; height: auto; max-height: 62vh; background: #000; pointer-events: auto;
+      position: static; z-index: auto;
+    }
+    @media (max-width: 1100px) {
+      main, .cities, .briefing { grid-template-columns: 1fr; }
+      .lb-videos { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Cross-city safety board</h1>
+      <div class="sub">Same query, three cities — briefing strip is the top moment in each</div>
+    </div>
+    <form class="controls" id="search-form">
+      <input id="query" name="query" />
+      <button type="submit">Search</button>
+      <button class="secondary" type="button" id="alt">Intersection query</button>
+      <button class="secondary" type="button" id="followup">Zebra / bus</button>
+      <label class="tog"><input type="checkbox" id="yolo" checked /> YOLO boxes</label>
+    </form>
+  </header>
+  <div class="status" id="status">Loading…</div>
+  <div class="briefing" id="briefing"></div>
+  <main>
+    <aside class="panel">
+      <h2 style="margin:0 0 8px;font-size:14px;">Camera ranking</h2>
+      <div class="sub">People among vehicles, this query only</div>
+      <div class="chips" id="chips"></div>
+      <div id="ranking"></div>
+      <div class="ladder">
+        <h2 style="margin:14px 0 4px;font-size:14px;">Why 0.08, not 0.35</h2>
+        <div class="sub">Red mark is the spec threshold that returned nothing. Dots are hits on this board.</div>
+        <div class="ladder-track" id="ladder"></div>
+      </div>
+      <div id="signatures"></div>
+    </aside>
+    <section>
+      <div class="panel" id="synth" style="margin-bottom:16px;display:none;"></div>
+      <div class="cities" id="cities"></div>
+    </section>
+  </main>
+  <div id="lightbox">
+    <div class="lb-inner">
+      <div class="lb-bar">
+        <button type="button" class="secondary" id="lb-fs">Full screen</button>
+        <button type="button" id="lb-close">Close</button>
+      </div>
+      <h2 id="lb-title"></h2>
+      <p class="meta" id="lb-meta"></p>
+      <p id="lb-cap"></p>
+      <div class="lb-videos">
+        <div><label>Before</label><video id="lb-before" controls playsinline></video></div>
+        <div><label>Event</label><video id="lb-event" controls playsinline></video></div>
+        <div><label>After</label><video id="lb-after" controls playsinline></video></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const statusEl = document.getElementById("status");
+    const citiesEl = document.getElementById("cities");
+    const rankEl = document.getElementById("ranking");
+    const synthEl = document.getElementById("synth");
+    const queryEl = document.getElementById("query");
+    const yoloEl = document.getElementById("yolo");
+    const chipsEl = document.getElementById("chips");
+    const briefingEl = document.getElementById("briefing");
+    const ladderEl = document.getElementById("ladder");
+    const signaturesEl = document.getElementById("signatures");
+    let focusCity = "all";
+    const detCache = new Map();
+
+    function streamUrl(source) {
+      return "/api/stream?source=" + encodeURIComponent(source);
+    }
+
+    function posterUrl(source) {
+      return "/api/poster?source=" + encodeURIComponent(source);
+    }
+
+    function clip(label, source, eager, isEvent) {
+      if (!source) {
+        return `<div class="clip"><label>${label}</label><div class="empty">—</div></div>`;
+      }
+      const poster = posterUrl(source);
+      const src = eager ? ` src="${streamUrl(source)}"` : ` data-src="${streamUrl(source)}"`;
+      const preload = eager ? "metadata" : "none";
+      const canvas = isEvent ? `<canvas class="yolo"></canvas>` : "";
+      return `<div class="clip"><label>${label}</label><div class="stage"><img class="thumb" src="${poster}" alt=""><video controls preload="${preload}" poster="${poster}"${src} data-source="${encodeURIComponent(source)}"></video>${canvas}</div></div>`;
+    }
+
+    function applyFocus() {
+      document.querySelectorAll(".city").forEach((el) => {
+        el.classList.toggle("dim", focusCity !== "all" && el.dataset.city !== focusCity);
+      });
+      document.querySelectorAll(".chips button").forEach((b) => {
+        b.classList.toggle("on", b.dataset.city === focusCity);
+      });
+      document.querySelectorAll(".rank-row").forEach((r) => {
+        r.classList.toggle("active", focusCity !== "all" && r.dataset.city === focusCity);
+      });
+    }
+
+    function nearestFrame(frames, t) {
+      if (!frames || !frames.length) return null;
+      let best = frames[0];
+      let dist = Math.abs((best.time_sec || 0) - t);
+      for (const fr of frames) {
+        const d = Math.abs((fr.time_sec || 0) - t);
+        if (d < dist) { best = fr; dist = d; }
+      }
+      return best;
+    }
+
+    function drawYolo(video, canvas, payload) {
+      const ctx = canvas.getContext("2d");
+      const w = video.clientWidth || 1;
+      const h = video.clientHeight || 110;
+      canvas.width = w;
+      canvas.height = h;
+      ctx.clearRect(0, 0, w, h);
+      if (!yoloEl.checked || !payload || payload.missing) return;
+      const shape = payload.video_shape || [720, 1280];
+      const srcH = shape[0] || 720;
+      const srcW = shape[1] || 1280;
+      const fr = nearestFrame(payload.frames, video.currentTime);
+      if (!fr) return;
+      const colors = { person: "#5eead4", car: "#38bdf8", motorcycle: "#fbbf24", bus: "#c084fc", truck: "#fb7185", bicycle: "#86efac" };
+      for (const d of fr.detections || []) {
+        const box = d.bbox || [];
+        if (box.length < 4) continue;
+        const x = box[0] / srcW * w;
+        const y = box[1] / srcH * h;
+        const bw = (box[2] - box[0]) / srcW * w;
+        const bh = (box[3] - box[1]) / srcH * h;
+        ctx.strokeStyle = colors[d.label] || "#fff";
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x, y, bw, bh);
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.font = "10px sans-serif";
+        ctx.fillText(d.label, x + 2, Math.max(10, y - 2));
+      }
+    }
+
+    async function attachOverlay(video) {
+      const source = decodeURIComponent(video.dataset.source || "");
+      const canvas = video.parentElement && video.parentElement.querySelector("canvas.yolo");
+      if (!canvas || !source) return;
+      let payload = detCache.get(source);
+      if (!payload) {
+        try {
+          const res = await fetch("/api/detections?source=" + encodeURIComponent(source));
+          payload = await res.json();
+          detCache.set(source, payload);
+        } catch {
+          payload = { frames: [], missing: true };
+        }
+      }
+      const tick = () => {
+        if (video.paused) return;
+        drawYolo(video, canvas, payload);
+        requestAnimationFrame(tick);
+      };
+      video.addEventListener("play", tick);
+      video.addEventListener("seeked", () => drawYolo(video, canvas, payload));
+      yoloEl.addEventListener("change", () => {
+        if (!yoloEl.checked) {
+          const ctx = canvas.getContext("2d");
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } else {
+          drawYolo(video, canvas, payload);
+        }
+      });
+    }
+
+    const lightbox = document.getElementById("lightbox");
+    const lbTitle = document.getElementById("lb-title");
+    const lbMeta = document.getElementById("lb-meta");
+    const lbCap = document.getElementById("lb-cap");
+    const lbVids = {
+      before: document.getElementById("lb-before"),
+      event: document.getElementById("lb-event"),
+      after: document.getElementById("lb-after"),
+    };
+
+    function setLbVideo(el, source) {
+      el.removeAttribute("src");
+      el.poster = "";
+      if (!source) {
+        el.style.display = "none";
+        return;
+      }
+      el.style.display = "block";
+      el.poster = posterUrl(source);
+      el.src = streamUrl(source);
+    }
+
+    function closeLightbox() {
+      Object.values(lbVids).forEach((v) => { v.pause(); v.removeAttribute("src"); v.load(); });
+      lightbox.classList.remove("open");
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }
+
+    function openLightbox(hit, focus) {
+      lbTitle.textContent = hit.filename || "";
+      lbMeta.textContent = `${hit.scene || ""} · ${hit.camera_id || ""} · t ${hit.best_match_start_sec}–${hit.best_match_end_sec}s`;
+      lbCap.textContent = hit.reasoning_content || "";
+      const tri = hit.triptych || {};
+      setLbVideo(lbVids.before, tri.before);
+      setLbVideo(lbVids.event, tri.event || hit.preview_source);
+      setLbVideo(lbVids.after, tri.after);
+      lightbox.classList.add("open");
+      const playEl = lbVids[focus] && lbVids[focus].getAttribute("src") ? lbVids[focus] : lbVids.event;
+      if (playEl && playEl.getAttribute("src")) {
+        playEl.muted = true;
+        const p = playEl.play();
+        if (p && p.catch) p.catch(() => {});
+      }
+    }
+
+    document.getElementById("lb-close").addEventListener("click", closeLightbox);
+    lightbox.addEventListener("click", (e) => { if (e.target === lightbox) closeLightbox(); });
+    document.getElementById("lb-fs").addEventListener("click", () => {
+      const box = lightbox.querySelector(".lb-inner");
+      const req = box.requestFullscreen || box.webkitRequestFullscreen;
+      if (req) req.call(box);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && lightbox.classList.contains("open")) closeLightbox();
+    });
+
+    function bindVideos(root) {
+      root.querySelectorAll(".hit").forEach((card) => {
+        let hit = {};
+        try { hit = JSON.parse(decodeURIComponent(card.dataset.hit || "")); } catch (e) { hit = {}; }
+        card.querySelectorAll(".stage").forEach((stage) => {
+          stage.addEventListener("click", (e) => {
+            e.preventDefault();
+            const label = (stage.parentElement.querySelector("label") || {}).textContent || "event";
+            const focus = label.toLowerCase().includes("before") ? "before"
+              : label.includes("After") || label.toLowerCase().includes("after") ? "after" : "event";
+            openLightbox(hit, focus);
+          });
+        });
+      });
+    }
+
+    function countsLine(h) {
+      const c = h.object_counts || {};
+      const parts = ["person", "car", "motorcycle", "bus", "truck"].filter(k => c[k]).map(k => `${k} ${c[k]}`);
+      return parts.length ? parts.join(" · ") : "";
+    }
+
+    function mixLine(mix) {
+      const c = mix || {};
+      return ["person", "car", "motorcycle", "bus", "truck"]
+        .filter((k) => c[k])
+        .map((k) => `${k} ${c[k]}`)
+        .join(" · ") || "no objects on these clips";
+    }
+
+    function renderLadder(ladder) {
+      const max = 0.7;
+      const used = (ladder && ladder.used) || 0.08;
+      const emptyAt = (ladder && ladder.spec_empty_at) || 0.35;
+      const points = (ladder && ladder.points) || [];
+      const tickPct = Math.min(100, (emptyAt / max) * 100);
+      const usedPct = Math.min(100, (used / max) * 100);
+      const dots = points.map((p) => {
+        const left = Math.min(98, Math.max(2, (p.score / max) * 100));
+        return `<span class="ladder-dot dot-${p.city}" style="left:${left}%" title="${p.city} ${(p.score || 0).toFixed(3)}"></span>`;
+      }).join("");
+      ladderEl.innerHTML = `
+        <div class="ladder-tick" style="left:${tickPct}%"><span>0.35 empty</span></div>
+        <div class="ladder-tick" style="left:${usedPct}%;background:#5eead4;width:2px"></div>
+        ${dots}`;
+    }
+
+    function renderBriefing(cards, grouped) {
+      briefingEl.innerHTML = (cards || []).map((c) => {
+        if (c.empty) {
+          return `<div class="brief-card empty" data-city="${c.city}"><div></div><div><h3>${c.city}</h3><p>No clip for this query.</p></div></div>`;
+        }
+        const img = c.preview ? `<img src="${posterUrl(c.preview)}" alt="">` : "<div></div>";
+        return `<div class="brief-card" data-city="${c.city}">
+          ${img}
+          <div>
+            <h3>${c.city} <span class="badge">${c.scene || ""}</span></h3>
+            <p>${c.radio || ""}</p>
+            <div class="meta">${(c.similarity_score || 0).toFixed(3)} · ${c.camera_id || ""}</div>
+          </div>
+        </div>`;
+      }).join("");
+      briefingEl.querySelectorAll(".brief-card").forEach((el) => {
+        el.style.cursor = "pointer";
+        el.addEventListener("click", () => {
+          focusCity = el.dataset.city;
+          applyFocus();
+          const col = document.querySelector(`.city[data-city="${el.dataset.city}"]`);
+          if (col) col.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    }
+
+    function renderSignatures(sigs) {
+      const cities = ["bangkok", "dublin", "london"];
+      signaturesEl.innerHTML = cities.map((city) => {
+        const s = (sigs || {})[city] || {};
+        return `<div class="sig">
+          <b style="text-transform:capitalize">${city}</b>
+          <div class="sub">${s.scene || "—"} · ${s.clips || 0} on the board</div>
+          <div class="mix">${mixLine(s.mix)}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function renderBoard(data) {
+      const groups = data.grouped || {};
+      const cities = ["bangkok", "dublin", "london"];
+      const counts = cities.map(c => `${c} ${(groups[c] || []).length}`).join(" · ");
+      const cacheNote = data.cached ? " · cached" : "";
+      statusEl.textContent = `${data.hit_count} hits on the board · ${data.segment_hits} indexed clips · min ${data.min_similarity} · ${counts}${cacheNote}`;
+      if (data.errors && Object.keys(data.errors).length) {
+        statusEl.textContent += " · some cameras failed, retry search";
+      }
+      synthEl.style.display = data.llm_synthesis ? "block" : "none";
+      synthEl.textContent = data.llm_synthesis || "";
+      renderBriefing(data.briefing, groups);
+      renderLadder(data.ladder);
+      renderSignatures(data.signatures);
+
+      chipsEl.innerHTML = ["all", ...cities].map(c =>
+        `<button type="button" data-city="${c}">${c}</button>`
+      ).join("");
+      chipsEl.querySelectorAll("button").forEach((b) => {
+        b.addEventListener("click", () => { focusCity = b.dataset.city; applyFocus(); });
+      });
+
+      rankEl.innerHTML = (data.ranking || []).map((r, i) => `
+        <div class="rank-row" data-city="${r.location}" data-cam="${r.camera_id}">
+          <div>#${i + 1} ${r.location} / ${r.camera_id}
+            <div class="sub">${r.hits} hits · people ${r.person} · cars ${r.car}</div>
+          </div>
+          <b>${(r.best_score || 0).toFixed(2)}</b>
+        </div>`).join("") || "<div class='empty'>No ranked cameras</div>";
+      rankEl.querySelectorAll(".rank-row").forEach((row) => {
+        row.addEventListener("click", () => {
+          focusCity = row.dataset.city;
+          applyFocus();
+          const col = document.querySelector(`.city[data-city="${row.dataset.city}"]`);
+          if (col) col.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+
+      citiesEl.innerHTML = cities.map((city) => {
+        const hits = groups[city] || [];
+        const cards = hits.map((h) => `
+          <article class="hit panel" data-hit="${encodeURIComponent(JSON.stringify(h))}">
+            <h3>${h.filename}</h3>
+            <div class="meta"><span class="badge">${h.scene || ""}</span>${h.camera_id} · t ${h.best_match_start_sec}–${h.best_match_end_sec}s · ${(h.similarity_score || 0).toFixed(3)} ${countsLine(h) ? "· " + countsLine(h) : ""}</div>
+            <div class="caption clamp">${h.reasoning_content || ""}</div>
+            <div class="triptych">
+              ${clip("Before", h.triptych && h.triptych.before, false, false)}
+              ${clip("Event", (h.triptych && h.triptych.event) || h.preview_source, false, true)}
+              ${clip("After", h.triptych && h.triptych.after, false, false)}
+            </div>
+          </article>`).join("") || "<div class='empty'>No hits in this city for this query.</div>";
+        return `<div class="city" data-city="${city}"><h2>${city}</h2>${cards}</div>`;
+      }).join("");
+      citiesEl.querySelectorAll(".caption").forEach((el) => {
+        el.addEventListener("click", () => el.classList.toggle("clamp"));
+      });
+      bindVideos(citiesEl);
+      applyFocus();
+    }
+
+    const searchMem = new Map();
+
+    async function search(query, minSim) {
+      const key = query + "|" + minSim;
+      focusCity = "all";
+      if (searchMem.has(key)) {
+        renderBoard(searchMem.get(key));
+        statusEl.textContent += " · instant";
+      } else {
+        statusEl.textContent = "Searching Pack A cameras…";
+      }
+      const t0 = performance.now();
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, min_similarity: minSim })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        statusEl.textContent = "Search failed: " + (data.detail || res.status);
+        return;
+      }
+      searchMem.set(key, data);
+      renderBoard(data);
+      statusEl.textContent += ` · ${(performance.now() - t0).toFixed(0)}ms`;
+    }
+
+    document.getElementById("search-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      search(queryEl.value, window.__minSim || 0.08);
+    });
+    document.getElementById("alt").addEventListener("click", () => {
+      queryEl.value = "pedestrians near cars at an intersection";
+      window.__minSim = 0.2;
+      search(queryEl.value, 0.2);
+    });
+    document.getElementById("followup").addEventListener("click", () => {
+      queryEl.value = "pedestrians on a zebra crossing while a bus waits";
+      window.__minSim = 0.15;
+      search(queryEl.value, 0.15);
+    });
+
+    fetch("/api/config").then(r => r.json()).then(cfg => {
+      queryEl.value = cfg.default_query;
+      window.__minSim = cfg.min_similarity;
+      return search(cfg.default_query, cfg.min_similarity);
+    }).catch(err => {
+      statusEl.textContent = "Could not load config: " + err;
+    });
+  </script>
+</body>
+</html>

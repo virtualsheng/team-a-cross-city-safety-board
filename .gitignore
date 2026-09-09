@@ -1,0 +1,10 @@
+.env
+.env.*
+*.config
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+team-a-*-secret.yaml
+team-a-k8s.yaml
